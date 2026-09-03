@@ -1,6 +1,6 @@
 import { getGtmToken, getGtmAccountWhitelist } from "@/lib/secret-manager";
 import { exchangeGtmToken, fetchGtmAccountList } from "@/lib/gtm-containers";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 
 export interface GtmAccount {
   accountId: string;
@@ -9,7 +9,10 @@ export interface GtmAccount {
 }
 
 export async function GET() {
-  const token = await getGtmToken(TENANT_ID);
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
+
+  const token = await getGtmToken(orgId);
   if (!token) {
     return Response.json(
       { error: "GTM not connected. Connect your account in Settings → Authorization." },
@@ -27,7 +30,7 @@ export async function GET() {
 
   const [accounts, whitelist] = await Promise.all([
     fetchGtmAccountList(accessToken),
-    getGtmAccountWhitelist(TENANT_ID),
+    getGtmAccountWhitelist(orgId),
   ]);
 
   const wlSet = new Set(whitelist);

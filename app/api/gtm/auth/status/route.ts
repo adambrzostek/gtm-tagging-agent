@@ -1,7 +1,9 @@
 import { getGtmStatus } from "@/lib/secret-manager";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 
 export async function GET() {
-  const status = await getGtmStatus(TENANT_ID);
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
+  const status = await getGtmStatus(orgId);
   return Response.json(status);
 }

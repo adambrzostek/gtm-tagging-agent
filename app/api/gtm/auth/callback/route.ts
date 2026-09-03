@@ -1,9 +1,12 @@
 import { type NextRequest } from "next/server";
 import { consumeOAuthState } from "@/lib/oauth-state";
 import { saveGtmToken } from "@/lib/secret-manager";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 
 export async function GET(req: NextRequest) {
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
+
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -58,7 +61,7 @@ export async function GET(req: NextRequest) {
     // email optional
   }
 
-  await saveGtmToken(TENANT_ID, {
+  await saveGtmToken(orgId, {
     refresh_token: tokenData.refresh_token,
     access_token: tokenData.access_token,
     email,

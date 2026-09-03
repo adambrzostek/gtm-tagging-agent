@@ -1,8 +1,8 @@
 import { type NextRequest } from "next/server";
-import { auth } from "@modelcontextprotocol/sdk/client/auth.js";
+import { auth as mcpAuth } from "@modelcontextprotocol/sdk/client/auth.js";
 import { StapeOAuthProvider } from "@/lib/stape-oauth-provider";
 import { createTimedFetch } from "@/lib/timed-fetch";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 
 export const maxDuration = 30;
 
@@ -17,6 +17,9 @@ function getRedirectBase(): string {
 }
 
 export async function GET(req: NextRequest) {
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
+
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -37,14 +40,14 @@ export async function GET(req: NextRequest) {
   }
 
   // state is the sessionId — links back to the stored PKCE code verifier
-  const provider = new StapeOAuthProvider(TENANT_ID, state);
+  const provider = new StapeOAuthProvider(orgId, state);
   const fetchFn = createTimedFetch();
 
   const t0 = Date.now();
   console.log(`[stape/auth/callback] ${new Date(t0).toISOString()} — calling auth() with code`);
 
   try {
-    const result = await auth(provider, {
+    const result = await mcpAuth(provider, {
       serverUrl: STAPE_MCP_URL,
       authorizationCode: code,
       fetchFn,

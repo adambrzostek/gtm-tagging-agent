@@ -1,5 +1,5 @@
 import { getGtmToken, getGtmWhitelist } from "@/lib/secret-manager";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 import { fetchAllGtmContainers } from "@/lib/gtm-containers";
 
 export interface GtmContainer {
@@ -14,18 +14,20 @@ export interface GtmContainer {
 }
 
 export async function GET(req: Request) {
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
   try {
-    return await handleGET(req);
+    return await handleGET(req, orgId);
   } catch (err) {
     console.error("[gtm/accounts] unhandled error:", err);
     return Response.json({ error: "Wewnętrzny błąd serwera." }, { status: 500 });
   }
 }
 
-async function handleGET(req: Request) {
+async function handleGET(req: Request, orgId: string) {
   const force = new URL(req.url).searchParams.get("force") === "true";
 
-  const token = await getGtmToken(TENANT_ID);
+  const token = await getGtmToken(orgId);
   if (!token) {
     return Response.json(
       { error: "Brak połączenia z GTM. Połącz konto w zakładce Autoryzacja." },
@@ -34,8 +36,8 @@ async function handleGET(req: Request) {
   }
 
   const [containers, whitelist] = await Promise.all([
-    fetchAllGtmContainers(TENANT_ID, force),
-    getGtmWhitelist(TENANT_ID),
+    fetchAllGtmContainers(orgId, force),
+    getGtmWhitelist(orgId),
   ]);
 
   const whitelistSet = new Set(whitelist);

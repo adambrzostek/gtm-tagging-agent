@@ -11,7 +11,7 @@ import {
 } from "@/lib/gtm-containers";
 import { StapeOAuthProvider, RedirectToAuthorizationError } from "@/lib/stape-oauth-provider";
 import { createTimedFetch } from "@/lib/timed-fetch";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 import { findPageElement } from "@/lib/page-reader";
 
 export const maxDuration = 60;
@@ -136,11 +136,14 @@ export async function POST(req: Request) {
   let mcpClient: Client | undefined;
 
   try {
+    const { orgId } = await auth();
+    if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
+
     const { messages } = await req.json();
 
     const [gtmTokenData, gtmContainers] = await Promise.all([
-      getGtmToken(TENANT_ID),
-      fetchWhitelistedGtmContainers(TENANT_ID),
+      getGtmToken(orgId),
+      fetchWhitelistedGtmContainers(orgId),
     ]);
 
     const gtmContainerMap = buildContainerMap(gtmContainers);
@@ -153,9 +156,9 @@ export async function POST(req: Request) {
     let tools: ToolSet | undefined;
 
     try {
-      const stape = await buildStapeTools(TENANT_ID, containerWhitelist);
+      const stape = await buildStapeTools(orgId, containerWhitelist);
       mcpClient = stape.client;
-      tools = await wrapToolsWithRules(stape.tools, gtmContainerMap);
+      tools = await wrapToolsWithRules(stape.tools, gtmContainerMap, orgId);
     } catch (err) {
       if (err instanceof RedirectToAuthorizationError) {
         console.error("[chat] buildStapeTools → RedirectToAuthorizationError: transport demanded re-auth despite token being present in Secret Manager. URL:", err.url?.toString());

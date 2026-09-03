@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, OrganizationSwitcher } from "@clerk/nextjs";
 import { Logo } from "./Logo";
 
 export function Header() {
@@ -24,6 +24,7 @@ export function Header() {
         >
           Ustawienia
         </Link>
+        <OrganizationSwitcher />
         <UserButton />
       </div>
     </header>

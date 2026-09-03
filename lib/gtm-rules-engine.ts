@@ -1,12 +1,12 @@
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
 import {
   fetchTaxonomyGtm,
-  fetchTaxonomyEvents,
   fetchReferenceConfig,
   type TaxonomyGtm,
   type TaxonomyEvents,
   type ReferenceConfig,
 } from "@/lib/reference-data";
+import { getOrgEvents } from "@/lib/org-events";
 import type { GtmContainerMap } from "@/lib/gtm-containers";
 
 // ── Naming helpers ────────────────────────────────────────────────────────────
@@ -83,10 +83,32 @@ function resolveContainerId(args: Args, containerMap: GtmContainerMap): Args {
   return { ...args, ...changes };
 }
 
-export async function wrapToolsWithRules(rawTools: ToolSet, containerMap: GtmContainerMap): Promise<ToolSet> {
+function orgEventsToTaxonomy(events: Awaited<ReturnType<typeof getOrgEvents>>): TaxonomyEvents {
+  const ga4: Record<string, { description?: string; parameters?: Record<string, { type?: string; required?: boolean; description?: string }> }> = {};
+  const meta: Record<string, { description?: string; parameters?: Record<string, { type?: string; required?: boolean; description?: string }> }> = {};
+  const tiktok: Record<string, { description?: string; parameters?: Record<string, { type?: string; required?: boolean; description?: string }> }> = {};
+
+  for (const e of events) {
+    const params: Record<string, { type?: string; required?: boolean; description?: string }> = {};
+    for (const p of e.parameters) params[p] = {};
+    ga4[e.event_name] = { description: e.description, parameters: params };
+    if (e.meta_event) meta[e.meta_event] = {};
+    if (e.tiktok_event) tiktok[e.tiktok_event] = {};
+  }
+
+  return {
+    platforms: {
+      ga4: { events: ga4 },
+      ...(Object.keys(meta).length > 0 ? { meta: { events: meta } } : {}),
+      ...(Object.keys(tiktok).length > 0 ? { tiktok: { events: tiktok } } : {}),
+    },
+  };
+}
+
+export async function wrapToolsWithRules(rawTools: ToolSet, containerMap: GtmContainerMap, orgId: string): Promise<ToolSet> {
   const [taxonomyGtm, taxonomyEvents, referenceConfig] = await Promise.all([
     fetchTaxonomyGtm().catch(() => ({} as TaxonomyGtm)),
-    fetchTaxonomyEvents().catch(() => ({} as TaxonomyEvents)),
+    getOrgEvents(orgId).then(orgEventsToTaxonomy).catch(() => ({} as TaxonomyEvents)),
     fetchReferenceConfig().catch(() => ({} as ReferenceConfig)),
   ]);
 

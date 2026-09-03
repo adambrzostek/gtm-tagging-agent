@@ -1,9 +1,11 @@
 import { deleteStapeToken } from "@/lib/secret-manager";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 
 export async function DELETE() {
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
   try {
-    await deleteStapeToken(TENANT_ID);
+    await deleteStapeToken(orgId);
     return Response.json({ success: true });
   } catch (err) {
     console.error("[stape/auth/disconnect] error:", err);

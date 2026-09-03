@@ -6,12 +6,14 @@ import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { AuthTab } from "./components/AuthTab";
 import { AccessTab } from "./components/AccessTab";
+import { EventsTab } from "./components/EventsTab";
 
-type Tab = "authorization" | "access";
+type Tab = "authorization" | "access" | "events";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "authorization", label: "Autoryzacja" },
   { id: "access", label: "Dostęp" },
+  { id: "events", label: "Taksonomia zdarzeń" },
 ];
 
 function SettingsContent() {
@@ -75,6 +77,7 @@ function SettingsContent() {
 
         {activeTab === "authorization" && <AuthTab />}
         {activeTab === "access" && <AccessTab />}
+        {activeTab === "events" && <EventsTab />}
       </div>
     </div>
   );

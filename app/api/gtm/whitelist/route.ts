@@ -1,12 +1,16 @@
 import { getGtmWhitelist, saveGtmWhitelist } from "@/lib/secret-manager";
-import { TENANT_ID } from "@/lib/tenant";
+import { auth } from "@clerk/nextjs/server";
 
 export async function GET() {
-  const whitelist = await getGtmWhitelist(TENANT_ID);
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
+  const whitelist = await getGtmWhitelist(orgId);
   return Response.json({ whitelist });
 }
 
 export async function POST(req: Request) {
+  const { orgId } = await auth();
+  if (!orgId) return Response.json({ error: "No active organization" }, { status: 400 });
   const body = await req.json() as unknown;
   if (!Array.isArray(body) || !body.every((x) => typeof x === "string")) {
     return Response.json(
@@ -15,6 +19,6 @@ export async function POST(req: Request) {
     );
   }
 
-  await saveGtmWhitelist(TENANT_ID, body as string[]);
+  await saveGtmWhitelist(orgId, body as string[]);
   return Response.json({ ok: true, count: body.length });
 }
