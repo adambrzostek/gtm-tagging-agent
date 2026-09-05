@@ -8,8 +8,8 @@ export default function HomePage() {
   const { user } = useUser();
   const firstName = user?.firstName?.trim() || "";
   const greeting = firstName
-    ? `Witaj ${firstName}, jestem Rychu Peja, Twój asystent do tagowania, co chcesz zrobić?`
-    : "Witaj, jestem Rychu Peja, Twój asystent do tagowania, co chcesz zrobić?";
+    ? `Witaj ${firstName}, jestem Betti, Twój asystent do tagowania, co chcesz zrobić?`
+    : "Witaj, jestem Betti, Twój asystent do tagowania, co chcesz zrobić?";
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--background)" }}>
@@ -54,7 +54,7 @@ function ChatTile() {
 
       <div className="flex-1">
         <h2 className="text-base font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
-          Rychu Peja
+          Betti
         </h2>
         <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
           Zarządzaj Google Tag Manager przez czat. Nadawaj dostępy, twórz tagi i sprawdzaj konfiguracje bez dotykania interfejsu.

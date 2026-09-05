@@ -78,7 +78,7 @@ export default function ChatPage() {
           <div className="flex flex-col items-center justify-center h-full gap-8 px-4">
             <div className="text-center">
               <h1 className="text-2xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>
-                Cześć, jestem Rychu Peja.
+                Cześć, jestem Betti.
               </h1>
               <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
                 Zapytaj o konfigurację GTM, tagi i triggery
@@ -123,7 +123,7 @@ export default function ChatPage() {
                   className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-xs font-bold"
                   style={{ background: "var(--surface-elevated)", color: "var(--text-muted)", borderRadius: "4px" }}
                 >
-                  RP
+                  B
                 </div>
                 <div
                   className="px-4 py-3 flex items-center gap-1.5"

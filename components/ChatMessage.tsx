@@ -28,7 +28,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           color: isUser ? "#000000" : "var(--text-muted)",
         }}
       >
-        {isUser ? "Ty" : "RP"}
+        {isUser ? "Ty" : "B"}
       </div>
 
       <div
