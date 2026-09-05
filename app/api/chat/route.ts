@@ -1,7 +1,9 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, dynamicTool, jsonSchema, type ToolSet } from "ai";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { registerGtmTools } from "google-tag-manager-mcp-core";
 import { buildSystemPrompt } from "@/lib/system-prompt";
 import { wrapToolsWithRules } from "@/lib/gtm-rules-engine";
 import { getGtmToken } from "@/lib/secret-manager";
@@ -9,25 +11,17 @@ import {
   fetchWhitelistedGtmContainers,
   buildContainerMap,
 } from "@/lib/gtm-containers";
-import { StapeOAuthProvider, RedirectToAuthorizationError } from "@/lib/stape-oauth-provider";
-import { createTimedFetch } from "@/lib/timed-fetch";
+import { createOrgGtmAuth } from "@/lib/gtm-local-auth";
 import { auth } from "@clerk/nextjs/server";
 import { findPageElement } from "@/lib/page-reader";
 
 export const maxDuration = 60;
 
-const STAPE_MCP_URL = "https://gtm-mcp.stape.ai/mcp";
-
-// Explicit timeout for each tool/call RPC — the SDK default is 60 s which is
-// too long for interactive chat. 20 s is enough for any single GTM operation.
+// Explicit timeout for each tool call RPC — 20 s is enough for any single GTM API operation.
 const TOOL_CALL_TIMEOUT_MS = 20_000;
-
-// Timeout for MCP transport HTTP calls (connect + listTools).
-const MCP_CONNECT_TIMEOUT_MS = 10_000;
 
 type McpTextContent = { type: "text"; text: string };
 
-// Abbreviate args for log output to avoid flooding logs with full payloads.
 function logArgs(args: Record<string, unknown>, maxLength = 300): string {
   try {
     const s = JSON.stringify(args);
@@ -37,41 +31,25 @@ function logArgs(args: Record<string, unknown>, maxLength = 300): string {
   }
 }
 
-// Races a promise against a deadline. Throws a descriptive error on timeout.
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      console.error(`[buildStapeTools] ${label} timed out after ${ms}ms`);
-      reject(new Error(`${label} timed out after ${ms}ms`));
-    }, ms);
-  });
-  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer!));
-}
-
-async function buildStapeTools(
-  tenantId: string,
+async function buildLocalGtmTools(
+  orgId: string,
   containerWhitelist: Set<string>
 ): Promise<{ tools: ToolSet; client: Client }> {
-  const timedFetch = createTimedFetch(MCP_CONNECT_TIMEOUT_MS);
-  const provider = new StapeOAuthProvider(tenantId);
+  const gtmAuth = createOrgGtmAuth(orgId);
+  const mcpServer = new McpServer({ name: "gtm-local", version: "1.0.0" });
+  registerGtmTools(mcpServer, { auth: gtmAuth });
+
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "bettersteps-tagging-agent", version: "1.0.0" });
-  const transport = new StreamableHTTPClientTransport(new URL(STAPE_MCP_URL), {
-    authProvider: provider,
-    // FetchLike = (url: string | URL, init?) => Promise<Response>; compatible with our wrapper.
-    fetch: timedFetch as unknown as (url: string | URL, init?: RequestInit) => Promise<Response>,
-  });
 
-  console.log("[buildStapeTools] connecting to Stape MCP...");
-  await withTimeout(client.connect(transport), MCP_CONNECT_TIMEOUT_MS, "client.connect()");
+  await Promise.all([
+    mcpServer.connect(serverTransport),
+    client.connect(clientTransport),
+  ]);
 
-  console.log("[buildStapeTools] listing tools...");
-  const { tools: mcpTools } = await withTimeout(
-    client.listTools(),
-    MCP_CONNECT_TIMEOUT_MS,
-    "client.listTools()"
-  );
-  console.log(`[buildStapeTools] connected — ${mcpTools.length} tools available`);
+  console.log("[buildLocalGtmTools] listing tools...");
+  const { tools: mcpTools } = await client.listTools();
+  console.log(`[buildLocalGtmTools] ${mcpTools.length} tools available`);
 
   const tools: ToolSet = {};
 
@@ -148,29 +126,27 @@ export async function POST(req: Request) {
 
     const gtmContainerMap = buildContainerMap(gtmContainers);
     // Include both publicId (GTM-XXXXXXX) and numeric containerId so the whitelist
-    // check in buildStapeTools passes regardless of which form the caller uses.
+    // check in buildLocalGtmTools passes regardless of which form the caller uses.
     const containerWhitelist = new Set(
       gtmContainers.flatMap((c) => [c.publicId, c.containerId])
     );
 
     let tools: ToolSet | undefined;
 
-    try {
-      const stape = await buildStapeTools(orgId, containerWhitelist);
-      mcpClient = stape.client;
-      tools = await wrapToolsWithRules(stape.tools, gtmContainerMap, orgId);
-    } catch (err) {
-      if (err instanceof RedirectToAuthorizationError) {
-        console.error("[chat] buildStapeTools → RedirectToAuthorizationError: transport demanded re-auth despite token being present in Secret Manager. URL:", err.url?.toString());
-      } else {
-        console.error("[chat] buildStapeTools failed:", err instanceof Error ? err.stack ?? err.message : err);
+    if (gtmTokenData) {
+      try {
+        const local = await buildLocalGtmTools(orgId, containerWhitelist);
+        mcpClient = local.client;
+        tools = await wrapToolsWithRules(local.tools, gtmContainerMap, orgId);
+      } catch (err) {
+        console.error("[chat] buildLocalGtmTools failed:", err instanceof Error ? err.stack ?? err.message : err);
       }
     }
 
-    // GTM connection status: true when Stape MCP connected successfully
+    // GTM connection status: true when local MCP connected successfully
     const gtmConnected = !!tools;
 
-    // Add local container listing tool (whitelist-aware, Stape doesn't handle this)
+    // Add local container listing tool (whitelist-aware)
     if (tools) {
       tools["gtm_list_accounts_and_containers"] = dynamicTool({
         description:
@@ -192,7 +168,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // find_page_element is always available regardless of GTM/Stape connection
+    // find_page_element is always available regardless of GTM connection
     const pageReaderTool = dynamicTool({
       description:
         "Render a public web page using headless Chromium and find an interactive element (button, link, form field) matching a natural-language description. Use this to discover stable CSS selectors for GTM click triggers. Only works on publicly accessible pages — pages behind login will not load.",
