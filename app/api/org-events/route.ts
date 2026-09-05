@@ -19,6 +19,8 @@ interface EventBody {
   event_name?: unknown;
   description?: unknown;
   parameters?: unknown;
+  required_parameters?: unknown;
+  required_meta_parameters?: unknown;
   meta_event?: unknown;
   tiktok_event?: unknown;
 }
@@ -44,6 +46,12 @@ export async function POST(req: Request) {
   const parameters = Array.isArray(body.parameters)
     ? (body.parameters as unknown[]).filter((p) => typeof p === "string").map((p) => (p as string).trim()).filter(Boolean)
     : [];
+  const required_parameters = Array.isArray(body.required_parameters)
+    ? (body.required_parameters as unknown[]).filter((p) => typeof p === "string").map((p) => (p as string).trim()).filter(Boolean)
+    : [];
+  const required_meta_parameters = Array.isArray(body.required_meta_parameters)
+    ? (body.required_meta_parameters as unknown[]).filter((p) => typeof p === "string").map((p) => (p as string).trim()).filter(Boolean)
+    : [];
   const meta_event = typeof body.meta_event === "string" && body.meta_event.trim() ? body.meta_event.trim() : null;
   const tiktok_event = typeof body.tiktok_event === "string" && body.tiktok_event.trim() ? body.tiktok_event.trim() : null;
 
@@ -56,7 +64,7 @@ export async function POST(req: Request) {
       return Response.json({ error: `Zdarzenie "${event_name}" już istnieje.` }, { status: 409 });
     }
 
-    await addOrgEvent(orgId, { event_group, event_name, description, parameters, meta_event, tiktok_event });
+    await addOrgEvent(orgId, { event_group, event_name, description, parameters, required_parameters, required_meta_parameters, meta_event, tiktok_event });
     return Response.json({ ok: true });
   } catch (err) {
     console.error("[org-events] POST error:", err);
